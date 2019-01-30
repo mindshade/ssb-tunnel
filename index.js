@@ -76,9 +76,11 @@ exports.init = function (sbot, config) {
       return {
         name: 'tunnel',
         scope: function () { return config.scope || 'public' },
-        server: function (onConnect) {
+        server: function (onConnect, startedCb) {
           //just remember the reference, call it
           //when the tunnel api is called.
+
+         startedCb(null,true);
 
           portal = config.portal
           setImmediate(function again () {
@@ -99,7 +101,7 @@ exports.init = function (sbot, config) {
               rpc.tunnel.announce(null, function (err) {
                 if(err) {
                   log('tunnel:listen - error during announcement at '+portal+' '+err.message)
-  
+
                   return reconnect()
                 }
                 //emit an event here?
