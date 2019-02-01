@@ -24,10 +24,11 @@ exports.version = '1.0.0'
 exports.manifest = {
   announce: 'sync',
   connect: 'duplex',
-  ping: 'sync'
+  ping: 'sync',
+  list: 'sync'
 }
 exports.permissions = {
-  anonymous: {allow: ['connect', 'announce', 'ping']}
+  anonymous: {allow: ['connect', 'announce', 'ping', 'list']}
 }
 
 exports.init = function (sbot, config) {
@@ -57,10 +58,10 @@ exports.init = function (sbot, config) {
     }
 
     if(!(
-      opts.name === 'tunnel' &&
-      isFeed(opts.portal) &&
-      isFeed(opts.target) &&
-      Number.isInteger(opts.port)
+        opts.name === 'tunnel' &&
+        isFeed(opts.portal) &&
+        isFeed(opts.target) &&
+        Number.isInteger(opts.port)
     )) return
 
     return opts
@@ -80,7 +81,10 @@ exports.init = function (sbot, config) {
           //just remember the reference, call it
           //when the tunnel api is called.
 
-         startedCb(null,true);
+          let isclosing = false;
+
+          log("tunnel: invoking multiserver callback");
+          startedCb && startedCb(null, true);
 
           portal = config.portal
           setImmediate(function again () {
@@ -88,35 +92,42 @@ exports.init = function (sbot, config) {
             //it would at least allow the tests to be fully ordered
             var timer
             function reconnect () {
-              if(sbot.closed) return
+              if(sbot.closed || isclosing) return;
               clearTimeout(timer)
               timer = setTimeout(again, 1000*Math.random())
             }
-            log('tunnel:listen - connecting to portal:'+portal)
-            sbot.gossip.connect(portal, function (err, rpc) {
-              if(err) {
-                log('tunnel:listen - failed to connect to portal:'+portal+' '+err.message)
-                return reconnect()
-              }
-              rpc.tunnel.announce(null, function (err) {
+            if (!isclosing && !sbot.closed) {
+              log('tunnel:listen - connecting to portal:'+portal)
+              sbot.gossip.connect(portal, function (err, rpc) {
                 if(err) {
-                  log('tunnel:listen - error during announcement at '+portal+' '+err.message)
-
+                  log('tunnel:listen - failed to connect to portal:'+portal+' '+err.message)
                   return reconnect()
                 }
-                //emit an event here?
-                log('tunnel:listen - SUCCESS establishing portal:'+portal)
-                sbot.emit('tunnel:listening', portal)
-              })
-              rpc.on('closed', function () {
-                log('tunnel:listen - portal closed:'+portal)
-                sbot.emit('tunnel:closed')
-                return reconnect()
-              })
-            })
-          })
+                rpc.tunnel.announce(null, function (err) {
+                  if(err) {
+                    log('tunnel:listen - error during announcement at '+portal+' '+err.message)
 
+                    return reconnect()
+                  }
+                  //emit an event here?
+                  log('tunnel:listen - SUCCESS establishing portal:'+portal)
+                  sbot.emit('tunnel:listening', portal)
+                })
+                rpc.on('closed', function () {
+                  log('tunnel:listen - portal closed:'+portal)
+                  sbot.emit('tunnel:closed')
+                  return reconnect()
+                })
+              })
+            }
+          })
           handlers[instance] = onConnect
+
+          return function close(cb) {
+            log('tunnel: closing, caused by server closing');
+            isclosing = true;
+            cb();
+          }
         },
         client: function (addr, cb) {
           var opts = parse(addr)
@@ -129,7 +140,7 @@ exports.init = function (sbot, config) {
             else {
               log('tunnel:connect - portal connected, tunnel to target:'+opts.target)
               cb(null, rpc.tunnel.connect({target: opts.target, port: opts.port}, function (err) {
-              log('tunnel:connect - failed to connect to target:'+opts.target+' '+err.message)
+                log('tunnel:connect - failed to connect to target:'+opts.target+' '+(err.message ? err.message : err))
                 //how to handle this error?
               }))
             }
@@ -168,6 +179,9 @@ exports.init = function (sbot, config) {
     },
     ping: function () {
       return Date.now()
+    },
+    list: function() {
+      return [...Object.keys(endpoints)];
     }
   }
 }
