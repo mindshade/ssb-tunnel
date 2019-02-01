@@ -140,8 +140,10 @@ exports.init = function (sbot, config) {
             else {
               log('tunnel:connect - portal connected, tunnel to target:'+opts.target)
               cb(null, rpc.tunnel.connect({target: opts.target, port: opts.port}, function (err) {
-                log('tunnel:connect - failed to connect to target:'+opts.target+' '+(err.message ? err.message : err))
-                //how to handle this error?
+                  if (err) {
+                      log('tunnel:connect - failed to connect to target:' + opts.target + ' ' + (err.message ? err.message : err))
+                      //how to handle this error?
+                  }
               }))
             }
           })
